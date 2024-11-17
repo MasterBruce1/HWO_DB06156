@@ -1,60 +1,3 @@
-import RPi.GPIO as GPIO
-import time
-
-
-sensors = {
-    "sensor1": 23,  # lowest
-    "sensor2": 24,  # 
-    "sensor3": 25,  # 
-    "sensor4": 8,  # highest
-}
-
-# GPIO
-stepPin = 17     # STEP 12
-dirPin = 27       # DIR 13
-enablePin = 22    # ENABLE  15
-
-def setup():
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(stepPin, GPIO.OUT)
-    GPIO.setup(dirPin, GPIO.OUT)
-    GPIO.setup(enablePin, GPIO.OUT)
-    GPIO.output(stepPin, GPIO.LOW)
-    GPIO.output(dirPin, GPIO.LOW)
-    GPIO.output(enablePin, GPIO.HIGH)  
-    
-def enable_driver():
-    GPIO.output(enablePin, GPIO.LOW)  
-
-
-def disable_driver():
-    GPIO.output(enablePin, GPIO.HIGH) 
-
-def move(steps, speed=200.0, direction='clockwise'):
-    time_per_step = 1.0 / speed
-
-    if direction == 'clockwise':
-        GPIO.output(dirPin, GPIO.HIGH)
-    else:
-        GPIO.output(dirPin, GPIO.LOW)
-    
-    for count in range(abs(steps)):
-        GPIO.output(stepPin, GPIO.HIGH)
-        time.sleep(time_per_step / 2)  
-        GPIO.output(stepPin, GPIO.LOW)
-        time.sleep(time_per_step / 2)  
-
-def move_continuous(speed=200.0, direction='clockwise',stop_condition=None):
-    time_per_step = 1.0 / speed
-    GPIO.output(dirPin, GPIO.HIGH if direction == 'clockwise' else GPIO.LOW)
-    while True:
-        GPIO.output(stepPin, GPIO.HIGH)
-        time.sleep(time_per_step / 2)  
-        GPIO.output(stepPin, GPIO.LOW)
-        time.sleep(time_per_step / 2)
-        if stop_condition and stop_condition():
-            break
-# GPIO
 GPIO.setmode(GPIO.BCM)
 for sensor, pin in sensors.items():
     GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
@@ -100,25 +43,32 @@ def main():
             if next_command > current_command:
                 print(f"Moving counterclockwise to reach state {next_command}...")
                 if next_command == 2:
-                    move_continuous(speed=200.0, direction='clockwise', stop_condition=stop_condition_sensor234)
+                    move(100, speed=200, direction='counterclockwise')
+                    move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_sensor234)
                 elif next_command == 3:
-                    move_continuous(speed=200.0, direction='clockwise', stop_condition=stop_condition_sensor34)
+                    move(100, speed=200, direction='counterclockwise')
+                    move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_sensor34)
                 elif next_command == 4:
-                    move_continuous(speed=200.0, direction='clockwise', stop_condition=stop_condition_sensor4)
+                    move(100, speed=200, direction='counterclockwise')
+                    move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_sensor4)
             elif next_command < current_command:
                 print(f"Moving clockwise to reach state {next_command}...")
                 if next_command == 4:
-                    move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_all_in_position)
+                    move(100, speed=200, direction='clockwise')
+                    move_continuous(speed=200.0, direction='clockwise', stop_condition=stop_condition_sensor4)
                 elif next_command == 3:
-                    move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_sensor234)
+                    move(100, speed=200, direction='clockwise')
+                    move_continuous(speed=200.0, direction='clockwise', stop_condition=stop_condition_sensor34)
                 elif next_command == 2:
-                    move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_sensor34)
+                    move(100, speed=200, direction='clockwise')
+                    move_continuous(speed=200.0, direction='clockwise', stop_condition=stop_condition_sensor234)
                 elif next_command == 1:
-                    move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_sensor4)
+                    move(100, speed=200, direction='clockwise')
+                    move_continuous(speed=200.0, direction='clockwise', stop_condition=stop_condition_all_in_position)
             else:
                 print("Staying in position. No movement required.")
 
-            # 更新当前命令状态
+            # æ›´æ–°å½“å‰å‘½ä»¤çŠ¶æ€
             current_command = next_command
 
     except KeyboardInterrupt:
@@ -129,3 +79,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
