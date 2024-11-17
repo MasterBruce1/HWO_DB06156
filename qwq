@@ -1,0 +1,131 @@
+import RPi.GPIO as GPIO
+import time
+
+
+sensors = {
+    "sensor1": 23,  # lowest
+    "sensor2": 24,  # 
+    "sensor3": 25,  # 
+    "sensor4": 8,  # highest
+}
+
+# GPIO
+stepPin = 17     # STEP 12
+dirPin = 27       # DIR 13
+enablePin = 22    # ENABLE  15
+
+def setup():
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(stepPin, GPIO.OUT)
+    GPIO.setup(dirPin, GPIO.OUT)
+    GPIO.setup(enablePin, GPIO.OUT)
+    GPIO.output(stepPin, GPIO.LOW)
+    GPIO.output(dirPin, GPIO.LOW)
+    GPIO.output(enablePin, GPIO.HIGH)  
+    
+def enable_driver():
+    GPIO.output(enablePin, GPIO.LOW)  
+
+
+def disable_driver():
+    GPIO.output(enablePin, GPIO.HIGH) 
+
+def move(steps, speed=200.0, direction='clockwise'):
+    time_per_step = 1.0 / speed
+
+    if direction == 'clockwise':
+        GPIO.output(dirPin, GPIO.HIGH)
+    else:
+        GPIO.output(dirPin, GPIO.LOW)
+    
+    for count in range(abs(steps)):
+        GPIO.output(stepPin, GPIO.HIGH)
+        time.sleep(time_per_step / 2)  
+        GPIO.output(stepPin, GPIO.LOW)
+        time.sleep(time_per_step / 2)  
+
+def move_continuous(speed=200.0, direction='clockwise',stop_condition=None):
+    time_per_step = 1.0 / speed
+    GPIO.output(dirPin, GPIO.HIGH if direction == 'clockwise' else GPIO.LOW)
+    while True:
+        GPIO.output(stepPin, GPIO.HIGH)
+        time.sleep(time_per_step / 2)  
+        GPIO.output(stepPin, GPIO.LOW)
+        time.sleep(time_per_step / 2)
+        if stop_condition and stop_condition():
+            break
+# GPIO
+GPIO.setmode(GPIO.BCM)
+for sensor, pin in sensors.items():
+    GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+
+# Check sensor states
+def check_sensors():
+    return {sensor: GPIO.input(pin) for sensor, pin in sensors.items()}
+
+# Stop conditions based on target sensor states
+def stop_condition_all_in_position(): #no.1 sensor
+    states = check_sensors()
+    return all(states.values())  # All sensors are "IN POSITION"
+
+def stop_condition_sensor4(): #no.4sensor
+    states = check_sensors()
+    return states["sensor4"] and not any(states[sensor] for sensor in ["sensor1", "sensor2", "sensor3"])
+
+def stop_condition_sensor34(): #no.3 sensor
+    states = check_sensors()
+    return states["sensor3"] and states["sensor4"] and not states["sensor1"] and not states["sensor2"]
+
+def stop_condition_sensor234(): #no2. sensor
+    states = check_sensors()
+    return states["sensor2"] and states["sensor3"] and states["sensor4"] and not states["sensor1"]
+
+# Main loop
+def main():
+    setup()
+    enable_driver()
+    try:
+        print("Moving clockwise until all sensors are IN POSITION...")
+        move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_all_in_position)
+        current_command = 1
+        
+        while True:
+            
+            next_command = input("Enter command (1: Sensor4, 2: Sensor34, 3: Sensor234, 4: All): ").strip()
+            if next_command not in ["1", "2", "3", "4"]:
+                print("Invalid input. Please enter 1, 2, 3, or 4.")
+                continue
+            next_command = int(next_command)
+            
+            if next_command > current_command:
+                print(f"Moving counterclockwise to reach state {next_command}...")
+                if next_command == 2:
+                    move_continuous(speed=200.0, direction='clockwise', stop_condition=stop_condition_sensor234)
+                elif next_command == 3:
+                    move_continuous(speed=200.0, direction='clockwise', stop_condition=stop_condition_sensor34)
+                elif next_command == 4:
+                    move_continuous(speed=200.0, direction='clockwise', stop_condition=stop_condition_sensor4)
+            elif next_command < current_command:
+                print(f"Moving clockwise to reach state {next_command}...")
+                if next_command == 4:
+                    move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_all_in_position)
+                elif next_command == 3:
+                    move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_sensor234)
+                elif next_command == 2:
+                    move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_sensor34)
+                elif next_command == 1:
+                    move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_sensor4)
+            else:
+                print("Staying in position. No movement required.")
+
+            # 更新当前命令状态
+            current_command = next_command
+
+    except KeyboardInterrupt:
+        print("Program terminated.")
+    finally:
+        disable_driver()
+        GPIO.cleanup()
+
+if __name__ == "__main__":
+    main()
