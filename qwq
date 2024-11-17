@@ -9,10 +9,56 @@ sensors = {
     "sensor4": 8,  # highest
 }
 
+DEVICE = '1a86:7523' 
+#G-code
+GRABup1 = "G1 Z230\r\n" 
+GRABup2 = "G1 X48\r\n" 
+GRABup4 = "G1 X20\r\n"
+GRABup5 = "G1 Z8.0 \r\n" 
+GRABup6 = "G1 Z30.0 \r\n"
+GRABdown1 = "G1 Z230\r\n"
+GRABdown2 = "G1 X50\r\n"
+GRABdown3 = "G1 Z10.0\r\n"
+GRABdown4 = "G1 X20\r\n"
+SETMAXSPEED = "M220 S2000\r\n"
+SETCOORSYS = "G90\r\n"
+CALIBEATE_ZX = "G28 Z X\r\n"
+
 # GPIO
 stepPin = 17     # STEP 12
 dirPin = 27       # DIR 13
 enablePin = 22    # ENABLE  15
+
+
+def command(ser, command):
+    print(f'cmd: {command}')
+    ser.write(str.encode(command)) 
+    time.sleep(1)
+    while True:
+        line = ser.readline()
+        if line == b'ok\n':
+            break
+        
+        
+def connect_device(device_signature, baudrate=115200):
+    candidates = list(list_ports.grep(device_signature))
+    if not candidates:
+        raise ValueError(f'No device with signature {device_signature} found')
+    if len(candidates) > 1:
+        raise ValueError(f'More than one device with signature {device_signature} found')
+    port = candidates[0].device
+    ser = serial.Serial(
+        port=port,
+        baudrate=baudrate,
+        parity=serial.PARITY_NONE,
+        stopbits=serial.STOPBITS_ONE,
+        bytesize=serial.EIGHTBITS,
+        timeout=0)
+    time.sleep(2)
+    print("connected to: " + ser.portstr)
+    ser.reset_input_buffer()
+    ser.reset_output_buffer()
+    return ser
 
 def setup():
     GPIO.setmode(GPIO.BCM)
@@ -53,12 +99,12 @@ def move_continuous(speed=200.0, direction='clockwise',stop_condition=None):
         GPIO.output(stepPin, GPIO.LOW)
         time.sleep(time_per_step / 2)
         if stop_condition and stop_condition():
-            # 等待一小段时间
-            time.sleep(0.1)  # 等待 100 毫秒
-            # 第二次判断
-            if stop_condition():  # 再次确认条件
+            # ç­‰å¾…ä¸€å°æ®µæ—¶é—´
+            time.sleep(0.1)  # ç­‰å¾… 100 æ¯«ç§’
+            # ç¬¬äºŒæ¬¡åˆ¤æ–­
+            if stop_condition():  # å†æ¬¡ç¡®è®¤æ¡ä»¶
                 break
-# GPIO
+				
 GPIO.setmode(GPIO.BCM)
 for sensor, pin in sensors.items():
     GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
@@ -84,52 +130,83 @@ def stop_condition_sensor234(): #no2. sensor
     states = check_sensors()
     return states["sensor2"] and states["sensor3"] and states["sensor4"] and not states["sensor1"]
 
+#grab up and down
+def grab_up_sequence(ser):
+    """
+    执行抓取时的上升动作序列
+    """
+    command(ser, GRABup5) 
+    command(ser, GRABup2)
+    command(ser, GRABup1)
+    command(ser, GRABup4)
+
+
+def grab_down_sequence(ser):
+    """
+    执行抓取时的下降动作序列
+    """
+    command(ser, GRABdown2)
+    command(ser, GRABdown3)
+    command(ser, GRABdown4)
+    
 # Main loop
 def main():
     setup()
     enable_driver()
     try:
+        ser = connect_device(DEVICE)
+
+        command(ser, CALIBEATE_ZX)
+
+        command(ser, SETMAXSPEED)
+
+        command(ser, SETCOORSYS)
+        
         print("Moving clockwise until all sensors are IN POSITION...")
-        move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_all_in_position)
+        move_continuous(speed=1000.0, direction='counterclockwise', stop_condition=stop_condition_all_in_position)
         current_command = 1
+        grab_up_sequence(ser)
         
         while True:
             
             next_command = input("Enter command (1: Sensor4, 2: Sensor34, 3: Sensor234, 4: All): ").strip()
             if next_command not in ["1", "2", "3", "4"]:
                 print("Invalid input. Please enter 1, 2, 3, or 4.")
-                continue
+                grab_down_sequence(ser)
+                break
             next_command = int(next_command)
             
             if next_command > current_command:
+                grab_down_sequence(ser)#grab sensor down
                 print(f"Moving counterclockwise to reach state {next_command}...")
                 if next_command == 2:
-                    move(100, speed=200, direction='counterclockwise')
-                    move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_sensor234)
+                    move(100, speed=2000, direction='counterclockwise')
+                    move_continuous(speed=2000.0, direction='counterclockwise', stop_condition=stop_condition_sensor234)
                 elif next_command == 3:
-                    move(100, speed=200, direction='counterclockwise')
-                    move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_sensor34)
+                    move(200, speed=2000, direction='counterclockwise')
+                    move_continuous(speed=2000.0, direction='counterclockwise', stop_condition=stop_condition_sensor34)
                 elif next_command == 4:
-                    move(100, speed=200, direction='counterclockwise')
-                    move_continuous(speed=200.0, direction='counterclockwise', stop_condition=stop_condition_sensor4)
+                    move(100, speed=2000, direction='counterclockwise')
+                    move_continuous(speed=2000.0, direction='counterclockwise', stop_condition=stop_condition_sensor4)
             elif next_command < current_command:
+                grab_down_sequence(ser)# grab sensor down
                 print(f"Moving clockwise to reach state {next_command}...")
                 if next_command == 4:
-                    move(100, speed=200, direction='clockwise')
-                    move_continuous(speed=200.0, direction='clockwise', stop_condition=stop_condition_sensor4)
+                    move(100, speed=2000, direction='clockwise')
+                    move_continuous(speed=2000.0, direction='clockwise', stop_condition=stop_condition_sensor4)
                 elif next_command == 3:
-                    move(100, speed=200, direction='clockwise')
-                    move_continuous(speed=200.0, direction='clockwise', stop_condition=stop_condition_sensor34)
+                    move(100, speed=2000, direction='clockwise')
+                    move_continuous(speed=2000.0, direction='clockwise', stop_condition=stop_condition_sensor34)
                 elif next_command == 2:
-                    move(100, speed=200, direction='clockwise')
-                    move_continuous(speed=200.0, direction='clockwise', stop_condition=stop_condition_sensor234)
+                    move(100, speed=2000, direction='clockwise')
+                    move_continuous(speed=2000.0, direction='clockwise', stop_condition=stop_condition_sensor234)
                 elif next_command == 1:
-                    move(100, speed=200, direction='clockwise')
-                    move_continuous(speed=200.0, direction='clockwise', stop_condition=stop_condition_all_in_position)
+                    move(100, speed=2000, direction='clockwise')
+                    move_continuous(speed=2000.0, direction='clockwise', stop_condition=stop_condition_all_in_position)
             else:
                 print("Staying in position. No movement required.")
-
-            # 更新当前命令状态
+                
+            grab_up_sequence(ser)#grab sensor up
             current_command = next_command
 
     except KeyboardInterrupt:
